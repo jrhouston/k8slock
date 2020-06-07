@@ -111,13 +111,13 @@ func NewLocker(name string, options ...option) (*Locker, error) {
 
 	// create the Lease if it doesn't exist
 	leaseClient := locker.clientset.CoordinationV1().Leases(locker.namespace)
-	lease, err := leaseClient.Get(context.TODO(), name, metav1.GetOptions{})
+	_, err := leaseClient.Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {
 			return nil, err
 		}
 
-		lease = &coordinationv1.Lease{
+		lease := &coordinationv1.Lease{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
