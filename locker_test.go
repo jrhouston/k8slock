@@ -5,10 +5,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // number of lockers to run in parallel
@@ -18,14 +14,9 @@ var parallelCount = 5
 var lockAttempts = 3
 
 func TestLocker(t *testing.T) {
-	clientset, err := newKubernetesClientset()
-	if err != nil {
-		t.Fatalf("could not create kubernetes clientset: %v", err)
-	}
-
 	lockers := []sync.Locker{}
 	for i := 0; i < parallelCount; i++ {
-		locker, err := NewLeaseLocker(clientset, "lock-test")
+		locker, err := NewLocker("lock-test")
 		if err != nil {
 			t.Fatalf("error creating LeaseLocker: %v", err)
 		}
@@ -51,17 +42,12 @@ func TestLocker(t *testing.T) {
 func TestLockTTL(t *testing.T) {
 	ttlSeconds := 10
 
-	clientset, err := newKubernetesClientset()
-	if err != nil {
-		t.Fatalf("could not create kubernetes clientset: %v", err)
-	}
-
-	locker1, err := NewLeaseLocker(clientset, "ttl-test", TTL(time.Duration(ttlSeconds)*time.Second))
+	locker1, err := NewLocker("ttl-test", TTL(time.Duration(ttlSeconds)*time.Second))
 	if err != nil {
 		t.Fatalf("error creating LeaseLocker: %v", err)
 	}
 
-	locker2, err := NewLeaseLocker(clientset, "ttl-test")
+	locker2, err := NewLocker("ttl-test")
 	if err != nil {
 		t.Fatalf("error creating LeaseLocker: %v", err)
 	}
@@ -76,22 +62,4 @@ func TestLockTTL(t *testing.T) {
 	if diff.Seconds() < float64(ttlSeconds) {
 		t.Fatal("client was able to acquire lock before the existing one had expired")
 	}
-}
-
-func newKubernetesClientset() (*kubernetes.Clientset, error) {
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	overrides := &clientcmd.ConfigOverrides{}
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	if config == nil {
-		config = &rest.Config{}
-	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return clientset, nil
 }
