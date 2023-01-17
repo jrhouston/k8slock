@@ -94,7 +94,7 @@ func NewLocker(name string, options ...option) (*Locker, error) {
 	}
 
 	if locker.clientID == "" {
-		locker.clientID = uuid.New().String()
+		locker.clientID = uuid.NewString()
 	}
 
 	if locker.retryWait == 0 {
