@@ -43,7 +43,7 @@ func InClusterConfig() func(*Locker) {
 	return func(l *Locker) {
 		c, err := inClusterClientset()
 		if err != nil {
-			panic(fmt.Sprintf("could not create config: %v", err))
+			panic(fmt.Errorf("could not create config: %w", err))
 		}
 		l.clientset = c
 	}
@@ -143,7 +143,7 @@ func (l *Locker) Lock() {
 		// get the Lease
 		lease, err := l.leaseClient.Get(context.TODO(), l.name, metav1.GetOptions{})
 		if err != nil {
-			panic(fmt.Sprintf("could not get Lease resource for lock: %v", err))
+			panic(fmt.Errorf("could not get Lease resource for lock: %w", err))
 		}
 
 		if lease.Spec.HolderIdentity != nil {
@@ -182,7 +182,7 @@ func (l *Locker) Lock() {
 
 		if !k8serrors.IsConflict(err) {
 			// if the error isn't a conflict then something went horribly wrong
-			panic(fmt.Sprintf("lock: error when trying to update Lease: %v", err))
+			panic(fmt.Errorf("lock: error when trying to update Lease: %w", err))
 		}
 
 		// Another client beat us to the lock
@@ -194,7 +194,7 @@ func (l *Locker) Lock() {
 func (l *Locker) Unlock() {
 	lease, err := l.leaseClient.Get(context.TODO(), l.name, metav1.GetOptions{})
 	if err != nil {
-		panic(fmt.Sprintf("could not get Lease resource for lock: %v", err))
+		panic(fmt.Errorf("could not get Lease resource for lock: %w", err))
 	}
 
 	// the holder has to have a value and has to be our ID for us to be able to unlock
@@ -211,7 +211,7 @@ func (l *Locker) Unlock() {
 	lease.Spec.LeaseDurationSeconds = nil
 	_, err = l.leaseClient.Update(context.TODO(), lease, metav1.UpdateOptions{})
 	if err != nil {
-		panic(fmt.Sprintf("unlock: error when trying to update Lease: %v", err))
+		panic(fmt.Errorf("unlock: error when trying to update Lease: %w", err))
 	}
 }
 

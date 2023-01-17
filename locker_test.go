@@ -1,10 +1,15 @@
 package k8slock
 
 import (
+	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // number of lockers to run in parallel
@@ -61,5 +66,33 @@ func TestLockTTL(t *testing.T) {
 	diff := acquired2.Sub(acquired1)
 	if diff.Seconds() < float64(ttlSeconds) {
 		t.Fatal("client was able to acquire lock before the existing one had expired")
+	}
+}
+
+func TestPanicErrorWrap(t *testing.T) {
+	locker, err := NewLocker("wrap-test")
+	if err != nil {
+		t.Fatalf("error creating LeaseLocker: %v", err)
+	}
+
+	_ = locker.leaseClient.Delete(context.Background(), locker.name, metav1.DeleteOptions{})
+
+	var panicErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr = r.(error)
+			}
+		}()
+		locker.Unlock()
+	}()
+
+	if panicErr == nil {
+		t.Fatalf("expected panic, but got none")
+	}
+
+	checkErr := new(k8serrors.StatusError)
+	if !errors.As(panicErr, &checkErr) {
+		t.Fatalf("expected StatusError, but got: %v", panicErr)
 	}
 }
