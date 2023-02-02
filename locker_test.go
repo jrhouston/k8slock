@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 // number of lockers to run in parallel
@@ -13,10 +15,12 @@ var parallelCount = 5
 // number of times each locker should lock then unlock
 var lockAttempts = 3
 
+var clientset = fake.NewSimpleClientset()
+
 func TestLocker(t *testing.T) {
 	lockers := []sync.Locker{}
 	for i := 0; i < parallelCount; i++ {
-		locker, err := NewLocker("lock-test")
+		locker, err := NewLocker("lock-test", Clientset(clientset))
 		if err != nil {
 			t.Fatalf("error creating LeaseLocker: %v", err)
 		}
@@ -42,12 +46,12 @@ func TestLocker(t *testing.T) {
 func TestLockTTL(t *testing.T) {
 	ttlSeconds := 10
 
-	locker1, err := NewLocker("ttl-test", TTL(time.Duration(ttlSeconds)*time.Second))
+	locker1, err := NewLocker("ttl-test", TTL(time.Duration(ttlSeconds)*time.Second), Clientset(clientset))
 	if err != nil {
 		t.Fatalf("error creating LeaseLocker: %v", err)
 	}
 
-	locker2, err := NewLocker("ttl-test")
+	locker2, err := NewLocker("ttl-test", Clientset(clientset))
 	if err != nil {
 		t.Fatalf("error creating LeaseLocker: %v", err)
 	}

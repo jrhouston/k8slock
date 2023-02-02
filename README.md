@@ -33,7 +33,7 @@ The locker can be configured using the following [functional options](https://da
 | `TTL(duration)` | The duration until the lock expires and can be forcibly claimed. By default the lock can be held infinitely. |
 | `RetryWaitDuration(duration)` | The duration to wait before retrying after failing to acquired the lock. Default: 1 second. |
 | `InClusterConfig()` | Get the kubernetes client config from inside a pod. Defaults to a clientset using the local kubeconfig. |
-| `Clientset(*kubernetes.Clientset)` | Configure a custom Kubernetes Clientset. Defaults to a clientset using the local kubeconfig. |
+| `Clientset(kubernetes.Interface)` | Configure a custom Kubernetes Clientset. Defaults to a clientset using the local kubeconfig. |
 | `Namespace(string)` | The kubernetes namespace to store the Lease resource. Defaults to "default". |
 | `ClientID(string)` | A unique ID for the client that is trying to obtain the lock. Defaults to a random UUID. |
 
