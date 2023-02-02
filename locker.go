@@ -20,7 +20,7 @@ import (
 
 // Locker implements the Locker interface using the kubernetes Lease resource
 type Locker struct {
-	clientset   *kubernetes.Clientset
+	clientset   kubernetes.Interface
 	leaseClient coordinationclientv1.LeaseInterface
 	namespace   string
 	name        string
@@ -50,7 +50,7 @@ func InClusterConfig() func(*Locker) {
 }
 
 // Clientset configures a custom Kubernetes Clientset
-func Clientset(c *kubernetes.Clientset) func(*Locker) {
+func Clientset(c kubernetes.Interface) func(*Locker) {
 	return func(l *Locker) {
 		l.clientset = c
 	}
@@ -215,7 +215,7 @@ func (l *Locker) Unlock() {
 	}
 }
 
-func localClientset() (*kubernetes.Clientset, error) {
+func localClientset() (kubernetes.Interface, error) {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	overrides := &clientcmd.ConfigOverrides{}
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
@@ -233,7 +233,7 @@ func localClientset() (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
-func inClusterClientset() (*kubernetes.Clientset, error) {
+func inClusterClientset() (kubernetes.Interface, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
