@@ -29,64 +29,73 @@ type Locker struct {
 	ttl         time.Duration
 }
 
-type option func(*Locker)
+type lockerOption func(*Locker) error
 
 // Namespace is the namespace used to store the Lease
-func Namespace(ns string) func(*Locker) {
-	return func(l *Locker) {
+func Namespace(ns string) lockerOption {
+	return func(l *Locker) error {
 		l.namespace = ns
+		return nil
 	}
 }
 
 // InClusterConfig configures the Kubernetes client assuming it is running inside a pod
-func InClusterConfig() func(*Locker) {
-	return func(l *Locker) {
+func InClusterConfig() lockerOption {
+	return func(l *Locker) error {
 		c, err := inClusterClientset()
 		if err != nil {
-			panic(fmt.Errorf("could not create config: %w", err))
+			return err
 		}
 		l.clientset = c
+		return nil
 	}
 }
 
 // Clientset configures a custom Kubernetes Clientset
-func Clientset(c kubernetes.Interface) func(*Locker) {
-	return func(l *Locker) {
+func Clientset(c kubernetes.Interface) lockerOption {
+	return func(l *Locker) error {
 		l.clientset = c
+		return nil
 	}
 }
 
 // RetryWaitDuration is the duration the Lock function will wait before retrying
 // after failing to acquire the lock
-func RetryWaitDuration(d time.Duration) func(*Locker) {
-	return func(l *Locker) {
+func RetryWaitDuration(d time.Duration) lockerOption {
+	return func(l *Locker) error {
 		l.retryWait = d
+		return nil
 	}
 }
 
 // ClientID is a unique ID for the client acquiring the lock
-func ClientID(id string) func(*Locker) {
-	return func(l *Locker) {
+func ClientID(id string) lockerOption {
+	return func(l *Locker) error {
 		l.clientID = id
+		return nil
 	}
 }
 
 // TTL is the duration a lock can exist before it can be forcibly acquired
 // by another client
-func TTL(ttl time.Duration) func(*Locker) {
-	return func(l *Locker) {
+func TTL(ttl time.Duration) lockerOption {
+	return func(l *Locker) error {
 		l.ttl = ttl
+		return nil
 	}
 }
 
 // NewLocker creates a Locker
-func NewLocker(name string, options ...option) (*Locker, error) {
+func NewLocker(name string, options ...lockerOption) (*Locker, error) {
 	locker := &Locker{
 		name: name,
 	}
 
 	for _, opt := range options {
-		opt(locker)
+		err := opt(locker)
+		if err != nil {
+			return nil, fmt.Errorf("locker options: %v", err)
+		}
 	}
 
 	if locker.namespace == "" {
@@ -136,14 +145,13 @@ func NewLocker(name string, options ...option) (*Locker, error) {
 	return locker, nil
 }
 
-// Lock will block until the client is the holder of the Lease resource
-func (l *Locker) Lock() {
+func (l *Locker) lock(ctx context.Context) error {
 	// block until we get a lock
 	for {
 		// get the Lease
-		lease, err := l.leaseClient.Get(context.TODO(), l.name, metav1.GetOptions{})
+		lease, err := l.leaseClient.Get(ctx, l.name, metav1.GetOptions{})
 		if err != nil {
-			panic(fmt.Errorf("could not get Lease resource for lock: %w", err))
+			return fmt.Errorf("could not get Lease resource for lock: %w", err)
 		}
 
 		if lease.Spec.HolderIdentity != nil {
@@ -164,17 +172,17 @@ func (l *Locker) Lock() {
 		}
 
 		// nobody holds the lock, try and lock it
-		lease.Spec.HolderIdentity = pointer.StringPtr(l.clientID)
+		lease.Spec.HolderIdentity = pointer.String(l.clientID)
 		if lease.Spec.LeaseTransitions != nil {
-			lease.Spec.LeaseTransitions = pointer.Int32Ptr((*lease.Spec.LeaseTransitions) + 1)
+			lease.Spec.LeaseTransitions = pointer.Int32((*lease.Spec.LeaseTransitions) + 1)
 		} else {
-			lease.Spec.LeaseTransitions = pointer.Int32Ptr((*lease.Spec.LeaseTransitions) + 1)
+			lease.Spec.LeaseTransitions = pointer.Int32((*lease.Spec.LeaseTransitions) + 1)
 		}
 		lease.Spec.AcquireTime = &metav1.MicroTime{time.Now()}
 		if l.ttl.Seconds() > 0 {
-			lease.Spec.LeaseDurationSeconds = pointer.Int32Ptr(int32(l.ttl.Seconds()))
+			lease.Spec.LeaseDurationSeconds = pointer.Int32(int32(l.ttl.Seconds()))
 		}
-		_, err = l.leaseClient.Update(context.TODO(), lease, metav1.UpdateOptions{})
+		_, err = l.leaseClient.Update(ctx, lease, metav1.UpdateOptions{})
 		if err == nil {
 			// we got the lock, break the loop
 			break
@@ -182,37 +190,66 @@ func (l *Locker) Lock() {
 
 		if !k8serrors.IsConflict(err) {
 			// if the error isn't a conflict then something went horribly wrong
-			panic(fmt.Errorf("lock: error when trying to update Lease: %w", err))
+			return fmt.Errorf("lock: error when trying to update Lease: %w", err)
 		}
 
 		// Another client beat us to the lock
 		time.Sleep(l.retryWait)
 	}
+
+	return nil
 }
 
-// Unlock will remove the client as the holder of the Lease resource
-func (l *Locker) Unlock() {
-	lease, err := l.leaseClient.Get(context.TODO(), l.name, metav1.GetOptions{})
+func (l *Locker) unlock(ctx context.Context) error {
+	lease, err := l.leaseClient.Get(ctx, l.name, metav1.GetOptions{})
 	if err != nil {
-		panic(fmt.Errorf("could not get Lease resource for lock: %w", err))
+		return fmt.Errorf("could not get Lease resource for lock: %w", err)
 	}
 
 	// the holder has to have a value and has to be our ID for us to be able to unlock
 	if lease.Spec.HolderIdentity == nil {
-		panic("unlock: no lock holder value")
+		return fmt.Errorf("unlock: no lock holder value")
 	}
 
 	if *lease.Spec.HolderIdentity != l.clientID {
-		panic("unlock: not the lock holder")
+		return fmt.Errorf("unlock: not the lock holder")
 	}
 
 	lease.Spec.HolderIdentity = nil
 	lease.Spec.AcquireTime = nil
 	lease.Spec.LeaseDurationSeconds = nil
-	_, err = l.leaseClient.Update(context.TODO(), lease, metav1.UpdateOptions{})
+	_, err = l.leaseClient.Update(ctx, lease, metav1.UpdateOptions{})
 	if err != nil {
-		panic(fmt.Errorf("unlock: error when trying to update Lease: %w", err))
+		return fmt.Errorf("unlock: error when trying to update Lease: %w", err)
 	}
+
+	return nil
+}
+
+// Lock will block until the client is the holder of the Lease resource
+func (l *Locker) Lock() {
+	err := l.lock(context.Background())
+	if err != nil {
+		panic(err)
+	}
+}
+
+// Unlock will remove the client as the holder of the Lease resource
+func (l *Locker) Unlock() {
+	err := l.unlock(context.Background())
+	if err != nil {
+		panic(err)
+	}
+}
+
+// LockContext will block until the client is the holder of the Lease resource
+func (l *Locker) LockContext(ctx context.Context) error {
+	return l.lock(ctx)
+}
+
+// UnlockContext will remove the client as the holder of the Lease resource
+func (l *Locker) UnlockContext(ctx context.Context) error {
+	return l.unlock(ctx)
 }
 
 func localClientset() (kubernetes.Interface, error) {

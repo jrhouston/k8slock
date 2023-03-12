@@ -1,8 +1,12 @@
 # k8slock [![Godoc](https://godoc.org/github.com/jrhouston/k8slock?status.svg)](https://godoc.org/github.com/jrhouston/k8slock) [![Go Report Card](https://goreportcard.com/badge/github.com/jrhouston/k8slock)](https://goreportcard.com/report/github.com/jrhouston/k8slock)
 
-k8slock is a Go module that makes it easy to do distributed locking by implementing the [sync.Locker](https://golang.org/pkg/sync/#Locker) interface using the [Lease](https://kubernetes.io/docs/reference/kubernetes-api/cluster-resources/lease-v1/) resource from the Kubernetes coordination API. 
+k8slock is a Go module that makes it easy to do distributed locking using the [Lease](https://kubernetes.io/docs/reference/kubernetes-api/cluster-resources/lease-v1/) resource from the Kubernetes coordination API. 
 
 If you want to use Kubernetes to create a simple distributed lock, this module is for you.
+
+This module implements the [sync.Locker](https://golang.org/pkg/sync/#Locker) interface using the `Lock()` and `Unlock()` functions.
+
+This module also supports using contexts via the `LockContext()` and `UnlockContext()` functions. 
 
 
 ## Basic Usage
@@ -21,6 +25,35 @@ func main() {
     locker.Lock()
     // do some work
     locker.Unlock()
+}
+```
+
+## Basic Usage – Context
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/jrhouston/k8slock"
+)
+
+func main() {
+    locker, err := k8slock.NewLocker("example-lock")
+    if err != nil {
+        panic(err)
+    }
+
+    ctx := context.Background()
+    if err := locker.LockContext(ctx); err != nil {
+        fmt.Println("Error trying to lock", err)
+    }
+
+    // do some work
+    
+    if err := locker.Unlock(ctx); err != nil {
+        fmt.Println("Error trying to unlock", err)
+    }
 }
 ```
 
