@@ -76,7 +76,7 @@ func TestLockTTL(t *testing.T) {
 }
 
 func TestPanicErrorWrap(t *testing.T) {
-	locker, err := NewLocker("wrap-test")
+	locker, err := NewLocker("wrap-test", Clientset(clientset))
 	if err != nil {
 		t.Fatalf("error creating LeaseLocker: %v", err)
 	}
