@@ -114,6 +114,9 @@ func TestSkipLeaseCreation(t *testing.T) {
 		},
 	}
 	_, err := clientset.CoordinationV1().Leases("default").Create(context.Background(), lease, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	locker, err := NewLocker(leaseName, Clientset(clientset), CreateLease(false))
 	if err != nil {
