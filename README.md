@@ -69,6 +69,7 @@ The locker can be configured using the following [functional options](https://da
 | `Clientset(kubernetes.Interface)` | Configure a custom Kubernetes Clientset. Defaults to a clientset using the local kubeconfig. |
 | `Namespace(string)` | The kubernetes namespace to store the Lease resource. Defaults to "default". |
 | `ClientID(string)` | A unique ID for the client that is trying to obtain the lock. Defaults to a random UUID. |
+| `CreateLease(bool)` | Create a Lease resource if it does not already exist. Defaults to `true`. |
 
 e.g:
 

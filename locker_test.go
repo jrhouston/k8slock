@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	coordinationv1 "k8s.io/api/coordination/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 )
 
 // number of lockers to run in parallel
@@ -74,7 +76,7 @@ func TestLockTTL(t *testing.T) {
 }
 
 func TestPanicErrorWrap(t *testing.T) {
-	locker, err := NewLocker("wrap-test")
+	locker, err := NewLocker("wrap-test", Clientset(clientset))
 	if err != nil {
 		t.Fatalf("error creating LeaseLocker: %v", err)
 	}
@@ -99,4 +101,33 @@ func TestPanicErrorWrap(t *testing.T) {
 	if !errors.As(panicErr, &checkErr) {
 		t.Fatalf("expected StatusError, but got: %v", panicErr)
 	}
+}
+
+func TestSkipLeaseCreation(t *testing.T) {
+	leaseName := "skip-create"
+	lease := &coordinationv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: leaseName,
+		},
+		Spec: coordinationv1.LeaseSpec{
+			LeaseTransitions: pointer.Int32(0),
+		},
+	}
+	_, err := clientset.CoordinationV1().Leases("default").Create(context.Background(), lease, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	locker, err := NewLocker(leaseName, Clientset(clientset), CreateLease(false))
+	if err != nil {
+		t.Fatalf("error creating LeaseLocker: %v", err)
+	}
+
+	defer func() {
+		if err := recover(); err != nil {
+			t.Fatalf("panic when locking: %v", err)
+		}
+	}()
+	locker.Lock()
+	locker.Unlock()
 }
