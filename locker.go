@@ -87,9 +87,10 @@ func TTL(ttl time.Duration) lockerOption {
 }
 
 // CreateLease specifies whether to create lease when it's absent.
-func CreateLease(create bool) func(*Locker) {
-	return func(l *Locker) {
+func CreateLease(create bool) lockerOption {
+	return func(l *Locker) error {
 		l.skipLeaseCreation = !create
+		return nil
 	}
 }
 
@@ -141,7 +142,7 @@ func NewLocker(name string, options ...lockerOption) (*Locker, error) {
 					Name: name,
 				},
 				Spec: coordinationv1.LeaseSpec{
-					LeaseTransitions: pointer.Int32Ptr(0),
+					LeaseTransitions: pointer.Int32(0),
 				},
 			}
 
@@ -189,7 +190,9 @@ func (l *Locker) lock(ctx context.Context) error {
 		} else {
 			lease.Spec.LeaseTransitions = pointer.Int32((*lease.Spec.LeaseTransitions) + 1)
 		}
-		lease.Spec.AcquireTime = &metav1.MicroTime{time.Now()}
+		lease.Spec.AcquireTime = &metav1.MicroTime{
+			Time: time.Now(),
+		}
 		if l.ttl.Seconds() > 0 {
 			lease.Spec.LeaseDurationSeconds = pointer.Int32(int32(l.ttl.Seconds()))
 		}
@@ -223,7 +226,7 @@ func (l *Locker) unlock(ctx context.Context) error {
 	}
 
 	if *lease.Spec.HolderIdentity != l.clientID {
-		return fmt.Errorf("unlock: not the lock holder")
+		return fmt.Errorf("unlock: not the lock holder (%v != %v)", *lease.Spec.HolderIdentity, l.clientID)
 	}
 
 	lease.Spec.HolderIdentity = nil
