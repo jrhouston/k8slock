@@ -51,7 +51,7 @@ func main() {
 
     // do some work
     
-    if err := locker.Unlock(ctx); err != nil {
+    if err := locker.UnlockContext(ctx); err != nil {
         fmt.Println("Error trying to unlock", err)
     }
 }
